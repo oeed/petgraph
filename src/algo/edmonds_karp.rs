@@ -58,21 +58,21 @@ use std::hash::Hash;
 /// ```
 /// TODO: PartialOrd versus Ord
 
-pub fn edmonds_karp<G, V, E, N, NR, ER, F>(original_graph: G, start: N, end: N, edge_cost: F) -> E
+pub fn edmonds_karp<G, V, E, N, NR, ER, F>(original_graph: G, start: N, end: N, edge_cost: F) -> (E, HashMap<ER, E>)
 where
     E: OrderableMeasure,
     G: GraphBase<NodeId = N, EdgeId = ER::EdgeId>,
     G: IntoEdges<EdgeRef = ER> + IntoNodeReferences<NodeRef = NR>,
     G: Data<NodeWeight = V, EdgeWeight = E>,
     NR: NodeRef<NodeId = N, Weight = V>,
-    ER: EdgeRef<NodeId = N, Weight = E>,
+    ER: EdgeRef<NodeId = N, Weight = E> + Eq + Hash,
     ER::EdgeId: PartialEq + Copy,
     N: Hash + Eq + Copy,
     F: Fn(G::EdgeRef) -> E,
 {
     // Start by making a directed version of the original graph using BFS.
     // The graph must be an adjacency list in order to run BFS in O(|E|) time.
-    let (mut graph, new_start, new_end) =
+    let (mut graph, new_start, new_end, original_edges) =
         copy_graph_directed(original_graph, start, end, edge_cost).unwrap();
 
     // For every edge, store the index of its reversed edge.
@@ -109,7 +109,14 @@ where
             *reversed_weight = reversed_weight.clone() + path_flow.clone();
         }
     }
-    max_flow
+
+    // a temporary way of determining flow weights
+    let edge_flows = original_edges.into_iter().map(|(original_edge, capacity, new_edge)| {
+        let unused_flow = graph[new_edge].clone();
+        (original_edge, capacity - unused_flow)
+    }).collect();
+
+    (max_flow, edge_flows)
 }
 
 /// Finds the minimum edge weight along the path.
@@ -136,13 +143,13 @@ fn copy_graph_directed<G, V, E, N, NR, ER, F>(
     start: N,
     end: N,
     edge_cost: F,
-) -> Result<(DiGraph<u8, E>, NodeIndex, NodeIndex), String>
+) -> Result<(DiGraph<u8, E>, NodeIndex, NodeIndex, Vec<(ER, E, EdgeIndex)>), String>
 where
     G: GraphBase<NodeId = N, EdgeId = ER::EdgeId>,
     G: IntoEdges<EdgeRef = ER> + IntoNodeReferences<NodeRef = NR>,
     G: Data<NodeWeight = V, EdgeWeight = E>,
     NR: NodeRef<NodeId = N, Weight = V>,
-    ER: EdgeRef<NodeId = N, Weight = E>,
+    ER: EdgeRef<NodeId = N, Weight = E> + Eq + Hash,
     ER::EdgeId: PartialEq + Copy,
     N: Hash + Eq + Copy,
     E: OrderableMeasure,
@@ -183,6 +190,7 @@ where
 
     // Extra edges to add to graph_copy
     let mut extra_edges = HashSet::new();
+    let mut original_edges = Vec::new();
 
     for start_ref in node_references {
         let edges = original_graph.edges(start_ref.id());
@@ -200,12 +208,13 @@ where
             if weight < E::default() {
                 return Err("Nonnegative edgeweights expected for Edmonds-Karp.".to_owned());
             }
-            graph_copy.add_edge(new_node_ids[start_index], new_node_ids[end_index], weight);
+            let new_edge = graph_copy.add_edge(new_node_ids[start_index], new_node_ids[end_index], weight.clone());
+            original_edges.push((edge_ref, weight, new_edge));
         }
     }
 
     for (index1, index2) in extra_edges {
         graph_copy.add_edge(new_node_ids[index1], new_node_ids[index2], E::default());
     }
-    Ok((graph_copy, new_start, new_end))
+    Ok((graph_copy, new_start, new_end, original_edges))
 }
