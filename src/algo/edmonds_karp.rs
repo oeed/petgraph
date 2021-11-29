@@ -58,15 +58,15 @@ use std::hash::Hash;
 /// ```
 /// TODO: PartialOrd versus Ord
 
-pub fn edmonds_karp<G, V, E, N, NR, ER, F>(original_graph: G, start: N, end: N, edge_cost: F) -> (E, HashMap<ER, E>)
+pub fn edmonds_karp<G, V, E, N, NR, ER, F>(original_graph: G, start: N, end: N, edge_cost: F) -> (E, HashMap<ER::EdgeId, E>)
 where
     E: OrderableMeasure,
     G: GraphBase<NodeId = N, EdgeId = ER::EdgeId>,
     G: IntoEdges<EdgeRef = ER> + IntoNodeReferences<NodeRef = NR>,
-    G: Data<NodeWeight = V, EdgeWeight = E>,
+    G: Data<NodeWeight = V>,
     NR: NodeRef<NodeId = N, Weight = V>,
-    ER: EdgeRef<NodeId = N, Weight = E> + Eq + Hash,
-    ER::EdgeId: PartialEq + Copy,
+    ER: EdgeRef<NodeId = N, Weight = E>,
+    ER::EdgeId: PartialEq + Copy + Eq + Hash,
     N: Hash + Eq + Copy,
     F: Fn(G::EdgeRef) -> E,
 {
@@ -143,14 +143,14 @@ fn copy_graph_directed<G, V, E, N, NR, ER, F>(
     start: N,
     end: N,
     edge_cost: F,
-) -> Result<(DiGraph<u8, E>, NodeIndex, NodeIndex, Vec<(ER, E, EdgeIndex)>), String>
+) -> Result<(DiGraph<u8, E>, NodeIndex, NodeIndex, Vec<(ER::EdgeId, E, EdgeIndex)>), String>
 where
     G: GraphBase<NodeId = N, EdgeId = ER::EdgeId>,
     G: IntoEdges<EdgeRef = ER> + IntoNodeReferences<NodeRef = NR>,
-    G: Data<NodeWeight = V, EdgeWeight = E>,
+    G: Data<NodeWeight = V>,
     NR: NodeRef<NodeId = N, Weight = V>,
-    ER: EdgeRef<NodeId = N, Weight = E> + Eq + Hash,
-    ER::EdgeId: PartialEq + Copy,
+    ER: EdgeRef<NodeId = N, Weight = E>,
+    ER::EdgeId: PartialEq + Copy + Eq + Hash,
     N: Hash + Eq + Copy,
     E: OrderableMeasure,
     F: Fn(G::EdgeRef) -> E,
@@ -209,7 +209,7 @@ where
                 return Err("Nonnegative edgeweights expected for Edmonds-Karp.".to_owned());
             }
             let new_edge = graph_copy.add_edge(new_node_ids[start_index], new_node_ids[end_index], weight.clone());
-            original_edges.push((edge_ref, weight, new_edge));
+            original_edges.push((edge_ref.id(), weight, new_edge));
         }
     }
 
